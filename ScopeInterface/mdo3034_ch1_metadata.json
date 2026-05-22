@@ -1,0 +1,30 @@
+{
+  "idn": "TEKTRONIX,MDO3034,C053047,CF:91.1CT FV:v1.30",
+  "visa_resource": "USB0::1689::1032::C053047::0::INSTR",
+  "waveform_source": "CH1",
+  "waveforms": 3000,
+  "points_per_waveform": "scope_returned",
+  "requested_capture_rate_hz": 10000.0,
+  "horizontal_scale_s_per_div": 1e-07,
+  "saved_time_window_s": [
+    -5e-07,
+    5e-07
+  ],
+  "waveform_csv_dir": "mdo3034_ch1_waveforms_1p2_kV",
+  "waveform_csv_name_pattern": "waveform_00000.csv",
+  "capture_times_file": "mdo3034_ch1_capture_times_1p2_kV.csv",
+  "waveform_csv_columns": [
+    "sample_index",
+    "time_s",
+    "voltage_v",
+    "raw_digitizing_level"
+  ],
+  "max_start_late_s": 787.864504186,
+  "scale": {
+    "horizontal_scale_s_per_div": 1e-07,
+    "xincr": 4e-10,
+    "xzero": -2e-06,
+    "ymult": 0.0008,
+    "yzero": 0.0
+  }
+}
