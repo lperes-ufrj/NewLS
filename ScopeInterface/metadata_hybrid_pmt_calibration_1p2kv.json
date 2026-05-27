@@ -1,12 +1,12 @@
 {
-  "date": "2026-05-27 16:26:45",
+  "date": "2026-05-27 16:41:52",
   "idn": "TEKTRONIX,MDO3034,C053047,CF:91.1CT FV:v1.30",
   "visa_resource": "USB0::0x0699::0x0408::C053047::INSTR",
   "waveform_source": "CH1",
   "waveforms": 3000,
   "points_per_waveform": 2500,
-  "csv_file": "C:\\Users\\User\\Documents\\IedaCodigos\\Leptons\\Hybrid\\NewLS-main\\NewLS-main\\ScopeInterface\\waveforms_hybrid_pmt_calibration_1p1kv.csv",
-  "root_file": "C:\\Users\\User\\Documents\\IedaCodigos\\Leptons\\Hybrid\\NewLS-main\\NewLS-main\\ScopeInterface\\waveforms_hybrid_pmt_calibration_1p1kv.root",
+  "csv_file": "C:\\Users\\User\\Documents\\IedaCodigos\\Leptons\\Hybrid\\NewLS-main\\NewLS-main\\ScopeInterface\\waveforms_hybrid_pmt_calibration_1p2kv.csv",
+  "root_file": "C:\\Users\\User\\Documents\\IedaCodigos\\Leptons\\Hybrid\\NewLS-main\\NewLS-main\\ScopeInterface\\waveforms_hybrid_pmt_calibration_1p2kv.root",
   "root_tree": "waveforms",
   "root_entries": 2500,
   "root_columns": [
