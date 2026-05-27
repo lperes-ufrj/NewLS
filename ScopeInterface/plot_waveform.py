@@ -7,9 +7,9 @@ import uproot
 
 
 BASE_DIR = Path(__file__).resolve().parent
-ROOT_FILE = BASE_DIR / "waveforms_hybrid_pmt_calibration_1p1kv.root"
-METADATA_FILE = BASE_DIR / "metadata_hybrid_pmt_calibration_1p1kv.json"
-WAVEFORM_INDICES = [11,12,13,14,15,16,17]
+ROOT_FILE = BASE_DIR / "waveforms_hybrid_pmt_calibration_1p2kv.root"
+METADATA_FILE = BASE_DIR / "metadata_hybrid_pmt_calibration_1p2kv.json"
+WAVEFORM_INDICES = [18,55,360,780,1214,2005,2713,2982]
 
 
 def read_metadata():
