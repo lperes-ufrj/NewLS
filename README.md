@@ -1,6 +1,6 @@
 # NewLS
 
-Python tools for acquiring, reading, plotting, and analyzing PMT calibration waveforms and chracterize scintillation signals.
+Python tools for acquiring, reading, plotting, and analyzing waveforms to PMT calibration and characterize scintillation signals.
 
 ## Project Layout
 
