@@ -11,16 +11,16 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.ReadWaveForms import load_waveforms
 
 DATA_DIR = PROJECT_ROOT / "data" / "PMT_Calibration"
-ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_calibration_1p1kv_10k_hires_0601.root"
-METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_calibration_1p1kv_10k_hires_0601.json"
-WAVEFORM_INDICES = np.arange(10000)
+ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_calibration_1p1kv_10k_hires_cs137_0601_run1.root"
+METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_calibration_1p1kv_10k_hires_cs137_0601_run1.json"
+WAVEFORM_INDICES = np.arange(1000)
 PLOTS_DIR = PROJECT_ROOT / "analysis" / "plots"
 
 BASELINE_WINDOW_MAX_US = -0.1
-INTEGRATION_WINDOW_US = (-0.025, 0.025)
+INTEGRATION_WINDOW_US = (-0.025, 0.03)
 SIGNAL_WINDOW_US = (-0.025, 0.05)
 OUT_OF_WINDOW_MAX_V = 0.001
-MAX_ACCEPTED_HEIGHT_V = 0.006
+MAX_ACCEPTED_HEIGHT_V = 0.15
 MIN_ACCEPTED_HEIGHT_V = 0.0005
 
 
@@ -59,9 +59,9 @@ def main():
     for waveform_index, voltage in waveforms.items():
         baseline = np.mean(voltage[baseline_mask])
         voltage = -(voltage - baseline)
-        if np.any(voltage[outside_signal_mask] > OUT_OF_WINDOW_MAX_V):
-            rejected_out_of_window += 1
-            continue
+       # if np.any(voltage[outside_signal_mask] > OUT_OF_WINDOW_MAX_V):
+        #    rejected_out_of_window += 1
+        #    continue
         height = np.max(voltage)
 
         if height > MAX_ACCEPTED_HEIGHT_V:
