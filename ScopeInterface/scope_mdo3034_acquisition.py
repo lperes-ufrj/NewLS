@@ -20,12 +20,14 @@ except ImportError as exc:
         "PyVISA is required. Install it and a VISA backend before running this script."
     ) from exc
 
-SAMPLE_LABEL = "HYBRID_PMT_CALIBRATION_1p3KV"
+SAMPLE_LABEL = "HYBRID_PMT_CALIBRATION_1p1KV_10K_HIRES_0601"
 EXPECTED_VENDOR = "TEKTRONIX"
 EXPECTED_MODEL = "MDO3034"
-VISA_RESOURCE = "USB0::0x0699::0x0408::C053047::INSTR"
+VISA_RESOURCE = "USB0::1689::1032::C053047::0::INSTR"
 BASE_DIR = Path(__file__).resolve().parent
-WAVEFORMS_TO_READ = 3_000
+WAVEFORMS_TO_READ = 10_000
+ACQUISITION_MODE = "HIRES"
+TRANSFER_WIDTH_BYTES = 2
 CSV_FILE = BASE_DIR / f"waveforms_{SAMPLE_LABEL.lower()}.csv"
 ROOT_FILE = BASE_DIR / f"waveforms_{SAMPLE_LABEL.lower()}.root"
 METADATA_FILE = BASE_DIR / f"metadata_{SAMPLE_LABEL.lower()}.json"
@@ -37,6 +39,7 @@ WAVEFORM_COLUMNS = (
     "voltage_v",
     "raw_digitizing_level",
 )
+PROGRESS_BAR_WIDTH = 30
 
 
 def configure_scope(scope: Any) -> None:
@@ -68,17 +71,117 @@ def visible_waveform_source(scope: Any) -> str:
 def configure_waveform_transfer(scope: Any, source: str) -> None:
     scope.write(f"DATA:SOURCE {source}")
     scope.write("DATA:ENC RIBINARY")
-    scope.write("DATA:WIDTH 1")
+    scope.write(f"DATA:WIDTH {TRANSFER_WIDTH_BYTES}")
 
 
-def read_scale(scope: Any) -> dict[str, float]:
+def configure_waveform_record_range(scope: Any) -> None:
+    scope.write("DATA:START 1")
+    try:
+        record_length = int(float(scope.query("HORIZONTAL:RECORDLENGTH?")))
+    except (ValueError, VisaError):
+        return
+    scope.write(f"DATA:STOP {record_length}")
+
+
+def configure_acquisition(scope: Any) -> None:
+    scope.write(f"ACQUIRE:MODE {ACQUISITION_MODE}")
+
+
+def query_float(scope: Any, command: str) -> float | None:
+    try:
+        return float(scope.query(command))
+    except (ValueError, VisaError):
+        return None
+
+
+def query_int(scope: Any, command: str) -> int | None:
+    value = query_float(scope, command)
+    if value is None:
+        return None
+    return int(value)
+
+
+def query_str(scope: Any, command: str) -> str | None:
+    try:
+        return scope.query(command).strip()
+    except VisaError:
+        return None
+
+
+def read_trigger_settings(scope: Any) -> dict[str, Any]:
+    trigger: dict[str, Any] = {}
+    trigger["level_v"] = query_float(scope, "TRIGGER:A:LEVEL?")
+    trigger["source"] = query_str(scope, "TRIGGER:A:EDGE:SOURCE?")
+    trigger["type"] = query_str(scope, "TRIGGER:A:TYPE?")
+    trigger["slope"] = query_str(scope, "TRIGGER:A:EDGE:SLOPE?")
+    return trigger
+
+
+def read_channel_settings(scope: Any, source: str) -> dict[str, Any]:
+    channel = {
+        "source": source,
+        "scale_v_per_div": query_float(scope, f"{source}:SCALE?"),
+        "position_div": query_float(scope, f"{source}:POSITION?"),
+        "offset_v": query_float(scope, f"{source}:OFFSET?"),
+        "coupling": query_str(scope, f"{source}:COUPLING?"),
+        "termination_ohm": query_float(scope, f"{source}:TERMINATION?"),
+        "bandwidth": query_str(scope, f"{source}:BANDWIDTH?"),
+        "invert": query_int(scope, f"{source}:INVERT?"),
+        "probe_gain": query_float(scope, f"{source}:PROBE?"),
+    }
+    return {key: value for key, value in channel.items() if value is not None}
+
+
+def read_transfer_settings(scope: Any) -> dict[str, Any]:
+    transfer = {
+        "data_source": query_str(scope, "DATA:SOURCE?"),
+        "data_start": query_int(scope, "DATA:START?"),
+        "data_stop": query_int(scope, "DATA:STOP?"),
+        "data_encoding": query_str(scope, "DATA:ENCdg?"),
+        "data_width_bytes": query_int(scope, "DATA:WIDTH?"),
+        "wfmoutpre": query_str(scope, "WFMOUTPRE?"),
+    }
+    return {key: value for key, value in transfer.items() if value is not None}
+
+
+def read_acquisition_settings(scope: Any) -> dict[str, Any]:
+    acquisition = {
+        "mode": query_str(scope, "ACQUIRE:MODE?"),
+        "num_average": query_int(scope, "ACQUIRE:NUMAVG?"),
+        "sample_rate_s_per_s": query_float(scope, "ACQUIRE:SRATE?"),
+        "stop_after": query_str(scope, "ACQUIRE:STOPAFTER?"),
+        "state": query_int(scope, "ACQUIRE:STATE?"),
+    }
+    return {key: value for key, value in acquisition.items() if value is not None}
+
+
+def read_scale(scope: Any) -> dict[str, Any]:
     scale = {
+        "acquisition_mode": scope.query("ACQUIRE:MODE?").strip(),
         "horizontal_scale_s_per_div": float(scope.query("HORIZONTAL:SCALE?")),
         "xincr": float(scope.query("WFMOUTPRE:XINCR?")),
         "xzero": float(scope.query("WFMOUTPRE:XZERO?")),
         "ymult": float(scope.query("WFMOUTPRE:YMULT?")),
         "yzero": float(scope.query("WFMOUTPRE:YZERO?")),
+        "yoff": float(scope.query("WFMOUTPRE:YOFF?")),
+        "transfer_width_bytes": float(scope.query("WFMOUTPRE:BYT_NR?")),
     }
+    try:
+        scale["byte_order"] = scope.query("WFMOUTPRE:BYT_OR?").strip().upper()
+    except VisaError:
+        scale["byte_order"] = "MSB"
+    try:
+        scale["record_length"] = float(scope.query("HORIZONTAL:RECORDLENGTH?"))
+    except (ValueError, VisaError):
+        pass
+    try:
+        scale["waveform_points"] = float(scope.query("WFMOUTPRE:NR_PT?"))
+    except (ValueError, VisaError):
+        pass
+    try:
+        scale["sample_rate_s_per_s"] = float(scope.query("ACQUIRE:SRATE?"))
+    except (ValueError, VisaError):
+        pass
     try:
         scale["horizontal_delay_time_s"] = float(scope.query("HORIZONTAL:DELAY:TIME?"))
         scale["horizontal_delay_mode"] = int(
@@ -90,8 +193,21 @@ def read_scale(scope: Any) -> dict[str, float]:
     return scale
 
 
-def read_raw_waveform(scope: Any) -> list[int]:
-    return scope.query_binary_values("CURVE?", datatype="b", container=list)
+def read_raw_waveform(scope: Any, scale: dict[str, Any]) -> list[int]:
+    transfer_width = int(scale["transfer_width_bytes"])
+    if transfer_width == 1:
+        datatype = "b"
+    elif transfer_width == 2:
+        datatype = "h"
+    else:
+        raise ValueError(f"Unsupported waveform transfer width: {transfer_width}")
+
+    return scope.query_binary_values(
+        "CURVE?",
+        datatype=datatype,
+        is_big_endian=not str(scale.get("byte_order", "MSB")).startswith("LSB"),
+        container=list,
+    )
 
 
 def wait_for_triggered_acquisition(scope: Any) -> None:
@@ -100,9 +216,40 @@ def wait_for_triggered_acquisition(scope: Any) -> None:
     scope.query("*OPC?")
 
 
+def format_duration(seconds: float) -> str:
+    seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours:d}h {minutes:02d}m {seconds:02d}s"
+    if minutes:
+        return f"{minutes:d}m {seconds:02d}s"
+    return f"{seconds:d}s"
+
+
+def print_progress(completed: int, total: int, started_at: float) -> None:
+    fraction = completed / total if total else 1.0
+    filled = round(PROGRESS_BAR_WIDTH * fraction)
+    bar = "#" * filled + "-" * (PROGRESS_BAR_WIDTH - filled)
+    elapsed_s = time.monotonic() - started_at
+    remaining_s = (elapsed_s / completed) * (total - completed) if completed else 0.0
+
+    print(
+        f"\r[{bar}] {fraction * 100:6.2f}% "
+        f"({completed}/{total}) "
+        f"elapsed {format_duration(elapsed_s)} "
+        f"left {format_duration(remaining_s)}",
+        end="",
+        flush=True,
+    )
+
+
 def waveform_arrays(
-    raw_waveform: list[int], scale: dict[str, float]
+    raw_waveform: list[int], scale: dict[str, Any]
 ) -> dict[str, np.ndarray]:
+    if not raw_waveform:
+        raise ValueError("The scope returned an empty waveform.")
+
     raw = np.asarray(raw_waveform, dtype=np.int16)
     sample_index = np.arange(raw.size, dtype=np.int32)
     time_s = scale["xzero"] + sample_index * scale["xincr"]
@@ -118,10 +265,18 @@ def waveform_arrays(
     sample_index = sample_index[visible]
     time_s = time_s[visible]
 
+    if raw.size == 0:
+        raise ValueError(
+            "No samples were found inside the displayed time window. "
+            "Check DATA:START/DATA:STOP, horizontal scale, and delay settings."
+        )
+
     return {
         "sample_index": sample_index,
         "time_s": time_s.astype(np.float64),
-        "voltage_v": (scale["yzero"] + raw * scale["ymult"]).astype(np.float64),
+        "voltage_v": (
+            scale["yzero"] + (raw - scale["yoff"]) * scale["ymult"]
+        ).astype(np.float64),
         "raw_digitizing_level": raw,
     }
 
@@ -141,18 +296,114 @@ def write_waveform_csv(arrays: dict[str, np.ndarray]) -> int:
     return len(arrays["sample_index"])
 
 
-def acquire_displayed_waveforms(scope: Any) -> tuple[str, dict[str, float], int]:
+def empty_resolution_diagnostics() -> dict[str, Any]:
+    return {
+        "waveforms_checked": 0,
+        "total_points_checked": 0,
+        "raw_min": None,
+        "raw_max": None,
+        "min_raw_code_step": None,
+        "raw_code_step_gcd": None,
+        "min_observed_voltage_step_v": None,
+        "raw_low_byte_values": set(),
+    }
+
+
+def update_resolution_diagnostics(
+    diagnostics: dict[str, Any],
+    arrays: dict[str, np.ndarray],
+) -> None:
+    raw = arrays["raw_digitizing_level"].astype(np.int64)
+    voltage = arrays["voltage_v"].astype(np.float64)
+    unique_raw = np.unique(raw)
+    unique_voltage = np.unique(voltage)
+
+    diagnostics["waveforms_checked"] += 1
+    diagnostics["total_points_checked"] += int(raw.size)
+    diagnostics["raw_min"] = (
+        int(np.min(raw))
+        if diagnostics["raw_min"] is None
+        else min(diagnostics["raw_min"], int(np.min(raw)))
+    )
+    diagnostics["raw_max"] = (
+        int(np.max(raw))
+        if diagnostics["raw_max"] is None
+        else max(diagnostics["raw_max"], int(np.max(raw)))
+    )
+    diagnostics["raw_low_byte_values"].update(int(value) for value in raw & 0xFF)
+
+    raw_steps = np.diff(unique_raw)
+    raw_steps = raw_steps[raw_steps > 0]
+    if raw_steps.size:
+        min_raw_step = int(np.min(raw_steps))
+        diagnostics["min_raw_code_step"] = (
+            min_raw_step
+            if diagnostics["min_raw_code_step"] is None
+            else min(diagnostics["min_raw_code_step"], min_raw_step)
+        )
+        step_gcd = int(np.gcd.reduce(raw_steps))
+        diagnostics["raw_code_step_gcd"] = (
+            step_gcd
+            if diagnostics["raw_code_step_gcd"] is None
+            else int(np.gcd(diagnostics["raw_code_step_gcd"], step_gcd))
+        )
+
+    voltage_steps = np.diff(unique_voltage)
+    voltage_steps = voltage_steps[voltage_steps > 0]
+    if voltage_steps.size:
+        min_voltage_step = float(np.min(voltage_steps))
+        diagnostics["min_observed_voltage_step_v"] = (
+            min_voltage_step
+            if diagnostics["min_observed_voltage_step_v"] is None
+            else min(diagnostics["min_observed_voltage_step_v"], min_voltage_step)
+        )
+
+
+def finalize_resolution_diagnostics(
+    diagnostics: dict[str, Any],
+    scale: dict[str, Any],
+) -> dict[str, Any]:
+    finalized = dict(diagnostics)
+    low_byte_values = sorted(finalized.pop("raw_low_byte_values"))
+    finalized["raw_low_byte_values"] = low_byte_values
+    finalized["raw_low_byte_always_zero"] = low_byte_values == [0]
+    finalized["ymult_v_per_raw_count"] = scale["ymult"]
+    if finalized["min_raw_code_step"] is not None:
+        finalized["effective_step_from_raw_step_v"] = (
+            finalized["min_raw_code_step"] * scale["ymult"]
+        )
+    if finalized["raw_code_step_gcd"] is not None:
+        finalized["effective_step_from_raw_gcd_v"] = (
+            finalized["raw_code_step_gcd"] * scale["ymult"]
+        )
+    return finalized
+
+
+def acquire_displayed_waveforms(
+    scope: Any,
+) -> tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], int]:
     source = visible_waveform_source(scope)
+    configure_acquisition(scope)
     configure_waveform_transfer(scope, source)
+    configure_waveform_record_range(scope)
     scale = read_scale(scope)
+    trigger = read_trigger_settings(scope)
+    run_settings = {
+        "channel": read_channel_settings(scope, source),
+        "transfer": read_transfer_settings(scope),
+        "acquisition": read_acquisition_settings(scope),
+    }
 
     points_saved = 0
     root_branches = {}
+    resolution_diagnostics = empty_resolution_diagnostics()
+    progress_started_at = time.monotonic()
 
     for waveform_index in range(WAVEFORMS_TO_READ):
         wait_for_triggered_acquisition(scope)
-        raw_waveform = read_raw_waveform(scope)
+        raw_waveform = read_raw_waveform(scope, scale)
         arrays = waveform_arrays(raw_waveform, scale)
+        update_resolution_diagnostics(resolution_diagnostics, arrays)
 
         if waveform_index == 0:
             points_saved = len(arrays["voltage_v"])
@@ -163,9 +414,9 @@ def acquire_displayed_waveforms(scope: Any) -> tuple[str, dict[str, float], int]
             )
 
         root_branches[f"waveform_{waveform_index:05d}"] = arrays["voltage_v"]
+        print_progress(waveform_index + 1, WAVEFORMS_TO_READ, progress_started_at)
 
-        if (waveform_index + 1) % 100 == 0:
-            print(f"Captured {waveform_index + 1}/{WAVEFORMS_TO_READ} waveforms.")
+    print()
 
     with uproot.recreate(ROOT_FILE) as root_file:
         root_tree = root_file.mktree(
@@ -174,11 +425,25 @@ def acquire_displayed_waveforms(scope: Any) -> tuple[str, dict[str, float], int]
         )
         root_tree.extend(root_branches)
 
-    return source, scale, points_saved
+    run_settings["effective_resolution"] = finalize_resolution_diagnostics(
+        resolution_diagnostics,
+        scale,
+    )
+    channel_scale_v_per_div = run_settings["channel"].get("scale_v_per_div")
+    if channel_scale_v_per_div is not None:
+        run_settings["effective_resolution"]["estimated_8bit_screen_step_v"] = (
+            10.0 * channel_scale_v_per_div / 256.0
+        )
+    return source, scale, trigger, run_settings, points_saved
 
 
 def write_metadata(
-    idn: str, source: str, scale: dict[str, float], points_saved: int
+    idn: str,
+    source: str,
+    scale: dict[str, Any],
+    trigger: dict[str, Any],
+    run_settings: dict[str, Any],
+    points_saved: int,
 ) -> None:
     metadata = {
         "date": DATE_COLLECTED,
@@ -209,6 +474,8 @@ def write_metadata(
             + 5.0 * scale["horizontal_scale_s_per_div"],
         ],
         "scale": scale,
+        "trigger": trigger,
+        "scope_settings": run_settings,
     }
     METADATA_FILE.write_text(json.dumps(metadata, indent=2) + "\n")
 
@@ -233,7 +500,9 @@ def main() -> int:
                 return 1
 
             try:
-                source, scale, points_saved = acquire_displayed_waveforms(scope)
+                source, scale, trigger, run_settings, points_saved = (
+                    acquire_displayed_waveforms(scope)
+                )
             finally:
                 scope.write("ACQUIRE:STOPAFTER RUNSTOP")
     except (RuntimeError, ValueError, VisaError) as exc:
@@ -242,7 +511,7 @@ def main() -> int:
     finally:
         manager.close()
 
-    write_metadata(idn, source, scale, points_saved)
+    write_metadata(idn, source, scale, trigger, run_settings, points_saved)
     print("OK: Tektronix MDO3034 waveforms saved.")
     print(
         f"Source: {source}. Saved {WAVEFORMS_TO_READ} waveforms "
