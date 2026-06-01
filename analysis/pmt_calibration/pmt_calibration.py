@@ -11,9 +11,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.ReadWaveForms import load_waveforms
 
 DATA_DIR = PROJECT_ROOT / "data" / "PMT_Calibration"
-ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_calibration_1p1kv_10k_hires_cs137_0601_run1.root"
-METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_calibration_1p1kv_10k_hires_cs137_0601_run1.json"
-WAVEFORM_INDICES = np.arange(1000)
+ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_calibration_1p1kv_10k_hires_cs137_0601_run2.root"
+METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_calibration_1p1kv_10k_hires_cs137_0601_run2.json"
+WAVEFORM_INDICES = np.arange(10000)
 PLOTS_DIR = PROJECT_ROOT / "analysis" / "plots"
 
 BASELINE_WINDOW_MAX_US = -0.1
@@ -124,7 +124,7 @@ def main():
     ax_integral.grid(True, alpha=0.35)
 
     ax_height = ax_integral.inset_axes([0.58, 0.58, 0.36, 0.34])
-    ax_height.hist(max_height, histtype="step", bins=100)
+    ax_height.hist(max_height, histtype="step", bins=50)
     ax_height.set_title("Max Height", fontsize=9)
     ax_height.set_xlabel("V", fontsize=8)
     ax_height.set_ylabel("Count", fontsize=8)
