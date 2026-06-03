@@ -11,16 +11,16 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.ReadWaveForms import load_waveforms
 
 DATA_DIR = PROJECT_ROOT / "data" / "RadioSources_Calibration"
-ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_1p1kv_10k_hires_ba133_0602_run1.root"
-METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_1p1kv_10k_hires_ba133_0602_run1.json"
+ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_1p1kv_10k_hires_cs137_0603_aftern2.root"
+METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_1p1kv_10k_hires_cs137_0603_aftern2.json"
 WAVEFORM_INDICES = np.arange(10000)
 PLOTS_DIR = PROJECT_ROOT / "analysis" / "plots"
 
 BASELINE_WINDOW_MAX_US = -0.05
 INTEGRATION_WINDOW_US = (-0.02, 0.03)
 SIGNAL_WINDOW_US = (-0.025, 0.05)
-OUT_OF_WINDOW_MAX_V = 0.08
-MAX_ACCEPTED_HEIGHT_V = 0.08
+OUT_OF_WINDOW_MAX_V = 0.15
+MAX_ACCEPTED_HEIGHT_V = 0.15
 MIN_ACCEPTED_HEIGHT_V = 0.0
 
 
