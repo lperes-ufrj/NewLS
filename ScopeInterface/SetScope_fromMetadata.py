@@ -24,9 +24,8 @@ METADATA_FILE = (
     PROJECT_ROOT
     / "data"
     / "PMT_Calibration"
-    / "metadata_hybrid_pmt_calibration_1p1kv_10k_hires_0601.json"
+    / "metadata_hybrid_pmt_1p1kv_calibration_labdet_ppo2g_l.json"
 )
-
 EXPECTED_VENDOR = "TEKTRONIX"
 EXPECTED_MODEL = "MDO3034"
 DEFAULT_VISA_RESOURCE = "USB0::1689::1032::C053047::0::INSTR"

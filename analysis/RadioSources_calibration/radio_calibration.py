@@ -5,16 +5,19 @@ from matplotlib import colors
 import matplotlib.pyplot as plt
 import numpy as np
 
+from scipy.integrate import trapezoid
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 from src.ReadWaveForms import load_waveforms
 
-DATA_DIR = PROJECT_ROOT / "data" / "RadioSources_Calibration"
-ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_1p1kv_10k_hires_cs137_0603_aftern2.root"
-METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_1p1kv_10k_hires_cs137_0603_aftern2.json"
-WAVEFORM_INDICES = np.arange(10000)
+DATA_DIR = PROJECT_ROOT / "data" / "background"
+ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_1p1kv_background_cs137_labdet_ppo2g_l.root"
+METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_1p1kv_background_cs137_labdet_ppo2g_l.json"
+WAVEFORM_INDICES = np.arange(20000)
 PLOTS_DIR = PROJECT_ROOT / "analysis" / "plots"
+
 
 BASELINE_WINDOW_MAX_US = -0.05
 INTEGRATION_WINDOW_US = (-0.02, 0.03)
@@ -25,7 +28,7 @@ MIN_ACCEPTED_HEIGHT_V = 0.0
 
 
 def integrate_waveform(time_us, voltage, integration_mask):
-    return np.trapz(voltage[integration_mask] * 1e3, time_us[integration_mask] * 1e3)
+    return trapezoid(voltage[integration_mask] * 1e3, time_us[integration_mask] * 1e3)
 
 
 def main():

@@ -20,18 +20,18 @@ except ImportError as exc:
         "PyVISA is required. Install it and a VISA backend before running this script."
     ) from exc
 
-SAMPLE_LABEL = "HYBRID_PMT_1p1KV_10K_HIRES_CS137_0603_AFTERN2"
+SAMPLE_LABEL = "HYBRID_PMT_1p1kv_calibration_DETEN_no_PPO"
 EXPECTED_VENDOR = "TEKTRONIX"
 EXPECTED_MODEL = "MDO3034"
 VISA_RESOURCE = "USB0::1689::1032::C053047::0::INSTR"
 BASE_DIR = Path(__file__).resolve().parent
-WAVEFORMS_TO_READ = 10_000
+WAVEFORMS_TO_READ = 15_000
 ACQUISITION_MODE = "HIRES"
 TRANSFER_WIDTH_BYTES = 2
 CSV_FILE = BASE_DIR / f"waveforms_{SAMPLE_LABEL.lower()}.csv"
 ROOT_FILE = BASE_DIR / f"waveforms_{SAMPLE_LABEL.lower()}.root"
 METADATA_FILE = BASE_DIR / f"metadata_{SAMPLE_LABEL.lower()}.json"
-TIMEOUT_MS = 10_000
+TIMEOUT_MS = 30_000
 DATE_COLLECTED = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 WAVEFORM_COLUMNS = (
     "sample_index",
