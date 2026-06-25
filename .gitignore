@@ -1,0 +1,4 @@
+# Big binary/data outputs (do not commit)
+*.root
+*.csv
+data/*/*.json
