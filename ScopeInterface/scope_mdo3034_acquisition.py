@@ -25,7 +25,7 @@ EXPECTED_VENDOR = "TEKTRONIX"
 EXPECTED_MODEL = "MDO3034"
 VISA_RESOURCE = "USB0::1689::1032::C053047::0::INSTR"
 BASE_DIR = Path(__file__).resolve().parent
-WAVEFORMS_TO_READ = 15_000
+ACQUISITION_DURATION_MINUTES = 30.0
 ACQUISITION_MODE = "HIRES"
 TRANSFER_WIDTH_BYTES = 2
 CSV_FILE = BASE_DIR / f"waveforms_{SAMPLE_LABEL.lower()}.csv"
@@ -227,21 +227,31 @@ def format_duration(seconds: float) -> str:
     return f"{seconds:d}s"
 
 
-def print_progress(completed: int, total: int, started_at: float) -> None:
-    fraction = completed / total if total else 1.0
+def print_progress(completed: int, duration_s: float, started_at: float) -> None:
+    elapsed_s = time.monotonic() - started_at
+    fraction = min(elapsed_s / duration_s, 1.0) if duration_s > 0 else 1.0
     filled = round(PROGRESS_BAR_WIDTH * fraction)
     bar = "#" * filled + "-" * (PROGRESS_BAR_WIDTH - filled)
-    elapsed_s = time.monotonic() - started_at
-    remaining_s = (elapsed_s / completed) * (total - completed) if completed else 0.0
+    remaining_s = max(0.0, duration_s - elapsed_s)
 
     print(
         f"\r[{bar}] {fraction * 100:6.2f}% "
-        f"({completed}/{total}) "
+        f"({completed} waveforms) "
         f"elapsed {format_duration(elapsed_s)} "
         f"left {format_duration(remaining_s)}",
         end="",
         flush=True,
     )
+
+
+def prompt_yes_no(question: str) -> bool:
+    while True:
+        answer = input(f"{question} [y/n]: ").strip().lower()
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"n", "no"}:
+            return False
+        print("Please answer yes or no.")
 
 
 def waveform_arrays(
@@ -381,7 +391,18 @@ def finalize_resolution_diagnostics(
 
 def acquire_displayed_waveforms(
     scope: Any,
-) -> tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], int]:
+) -> tuple[
+    str,
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    int,
+    int,
+    dict[str, Any],
+]:
+    if ACQUISITION_DURATION_MINUTES <= 0:
+        raise ValueError("ACQUISITION_DURATION_MINUTES must be greater than zero.")
+
     source = visible_waveform_source(scope)
     configure_acquisition(scope)
     configure_waveform_transfer(scope, source)
@@ -396,27 +417,71 @@ def acquire_displayed_waveforms(
 
     points_saved = 0
     root_branches = {}
+    first_waveform_arrays: dict[str, np.ndarray] | None = None
     resolution_diagnostics = empty_resolution_diagnostics()
     progress_started_at = time.monotonic()
+    acquisition_started_at = time.time()
+    acquisition_duration_s = ACQUISITION_DURATION_MINUTES * 60.0
+    acquisition_deadline = progress_started_at + acquisition_duration_s
+    interrupted = False
 
-    for waveform_index in range(WAVEFORMS_TO_READ):
-        wait_for_triggered_acquisition(scope)
-        raw_waveform = read_raw_waveform(scope, scale)
-        arrays = waveform_arrays(raw_waveform, scale)
-        update_resolution_diagnostics(resolution_diagnostics, arrays)
+    try:
+        while time.monotonic() < acquisition_deadline:
+            waveform_index = len(root_branches)
+            wait_for_triggered_acquisition(scope)
+            raw_waveform = read_raw_waveform(scope, scale)
+            arrays = waveform_arrays(raw_waveform, scale)
+            update_resolution_diagnostics(resolution_diagnostics, arrays)
 
-        if waveform_index == 0:
-            points_saved = len(arrays["voltage_v"])
-            write_waveform_csv(arrays)
-        elif len(arrays["voltage_v"]) != points_saved:
-            raise ValueError(
-                "ROOT output expects each saved waveform to have the same length."
+            if waveform_index == 0:
+                points_saved = len(arrays["voltage_v"])
+                first_waveform_arrays = arrays
+            elif len(arrays["voltage_v"]) != points_saved:
+                raise ValueError(
+                    "ROOT output expects each saved waveform to have the same length."
+                )
+
+            root_branches[f"waveform_{waveform_index:05d}"] = arrays["voltage_v"]
+            print_progress(
+                waveform_index + 1,
+                acquisition_duration_s,
+                progress_started_at,
             )
-
-        root_branches[f"waveform_{waveform_index:05d}"] = arrays["voltage_v"]
-        print_progress(waveform_index + 1, WAVEFORMS_TO_READ, progress_started_at)
+    except KeyboardInterrupt:
+        interrupted = True
 
     print()
+    actual_duration_s = time.time() - acquisition_started_at
+    waveforms_saved = len(root_branches)
+
+    acquisition_timing = {
+        "requested_duration_minutes": ACQUISITION_DURATION_MINUTES,
+        "requested_duration_s": acquisition_duration_s,
+        "actual_duration_s": actual_duration_s,
+        "actual_duration_minutes": actual_duration_s / 60.0,
+        "started_at": time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(acquisition_started_at)
+        ),
+        "ended_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+        "completed_requested_duration": not interrupted,
+        "interrupted": interrupted,
+    }
+
+    if interrupted:
+        print(
+            "Acquisition interrupted after "
+            f"{format_duration(actual_duration_s)} with {waveforms_saved} waveforms."
+        )
+        if not root_branches:
+            raise RuntimeError("No waveforms were collected before the interruption.")
+        if not prompt_yes_no("Save the waveforms collected so far?"):
+            raise RuntimeError("Acquisition interrupted; collected data was not saved.")
+    elif not root_branches:
+        raise RuntimeError("No waveforms were collected during the requested time.")
+
+    if first_waveform_arrays is None:
+        raise RuntimeError("No first waveform preview is available to save.")
+    write_waveform_csv(first_waveform_arrays)
 
     with uproot.recreate(ROOT_FILE) as root_file:
         root_tree = root_file.mktree(
@@ -434,7 +499,15 @@ def acquire_displayed_waveforms(
         run_settings["effective_resolution"]["estimated_8bit_screen_step_v"] = (
             10.0 * channel_scale_v_per_div / 256.0
         )
-    return source, scale, trigger, run_settings, points_saved
+    return (
+        source,
+        scale,
+        trigger,
+        run_settings,
+        points_saved,
+        waveforms_saved,
+        acquisition_timing,
+    )
 
 
 def write_metadata(
@@ -444,21 +517,26 @@ def write_metadata(
     trigger: dict[str, Any],
     run_settings: dict[str, Any],
     points_saved: int,
+    waveforms_saved: int,
+    acquisition_timing: dict[str, Any],
 ) -> None:
     metadata = {
         "date": DATE_COLLECTED,
         "idn": idn,
         "visa_resource": VISA_RESOURCE,
         "waveform_source": source,
-        "waveforms": WAVEFORMS_TO_READ,
+        "waveforms": waveforms_saved,
         "points_per_waveform": points_saved,
         "csv_file": str(CSV_FILE),
         "root_file": str(ROOT_FILE),
         "root_tree": "waveforms",
         "root_entries": points_saved,
-        "root_columns": [f"waveform_{index:05d}" for index in range(WAVEFORMS_TO_READ)],
+        "root_columns": [
+            f"waveform_{index:05d}" for index in range(waveforms_saved)
+        ],
         "root_units": "V",
         "waveform_csv_columns": list(WAVEFORM_COLUMNS),
+        "acquisition_time": acquisition_timing,
         "display_time_window_s": [
             (
                 scale["horizontal_delay_time_s"]
@@ -500,7 +578,15 @@ def main() -> int:
                 return 1
 
             try:
-                source, scale, trigger, run_settings, points_saved = (
+                (
+                    source,
+                    scale,
+                    trigger,
+                    run_settings,
+                    points_saved,
+                    waveforms_saved,
+                    acquisition_timing,
+                ) = (
                     acquire_displayed_waveforms(scope)
                 )
             finally:
@@ -511,11 +597,21 @@ def main() -> int:
     finally:
         manager.close()
 
-    write_metadata(idn, source, scale, trigger, run_settings, points_saved)
+    write_metadata(
+        idn,
+        source,
+        scale,
+        trigger,
+        run_settings,
+        points_saved,
+        waveforms_saved,
+        acquisition_timing,
+    )
     print("OK: Tektronix MDO3034 waveforms saved.")
     print(
-        f"Source: {source}. Saved {WAVEFORMS_TO_READ} waveforms "
-        f"with {points_saved} points each."
+        f"Source: {source}. Saved {waveforms_saved} waveforms "
+        f"with {points_saved} points each in "
+        f"{format_duration(acquisition_timing['actual_duration_s'])}."
     )
     print(f"Saved first waveform CSV preview to {CSV_FILE}.")
     print(f"Saved ROOT tree with all waveforms to {ROOT_FILE}.")

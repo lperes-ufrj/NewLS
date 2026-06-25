@@ -16,8 +16,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.ReadWaveForms import load_waveforms
 
 DATA_DIR = PROJECT_ROOT / "data" / "PMT_Calibration"
-ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_1p1kv_calibration_labsno_ppo2g_l.root"
-METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_1p1kv_calibration_labsno_ppo2g_l.json"
+ROOT_FILE = DATA_DIR / "waveforms_hybrid_pmt_1p1kv_calibration_labdet_ppo2g_l.root"
+METADATA_FILE = DATA_DIR / "metadata_hybrid_pmt_1p1kv_calibration_labdet_ppo2g_l.json"
 WAVEFORM_INDICES = np.arange(15000)
 PLOTS_DIR = PROJECT_ROOT / "analysis" / "plots"
 
@@ -71,7 +71,7 @@ def main():
     for waveform_index, voltage in waveforms.items():
         baseline = np.mean(voltage[baseline_mask])
         voltage = -(voltage - baseline)
-        if np.any(voltage[outside_signal_mask] > OUT_OF_WINDOW_MAX_V):
+        if np.any(np.abs(voltage[outside_signal_mask]) > OUT_OF_WINDOW_MAX_V):
             rejected_out_of_window += 1
             continue
         height = np.max(voltage)
