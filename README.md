@@ -112,4 +112,5 @@ Metadata JSON files include the display time window, oscilloscope scale settings
 
 - Run scripts from the project root when possible.
 - `src/ReadWaveForms.py` should stay free of plotting code so analysis scripts can reuse it cleanly.
-- Large generated data files should be kept under `data/PMT_Calibration/`.
+- You must assume that all the data in this repository is deprecated. The data acquisition is independent of this repository. 
+- Large generated data files should be kept under `data/`.
