@@ -9,6 +9,13 @@ memory segments, so each logical batch is acquired as ten consecutive
 
 The first waveform is written to CSV, every waveform is written to a ROOT
 tree, and the oscilloscope setup and waveform preamble are written to JSON.
+
+python ScopeInterface/scope_ds0x1204a_acquisition_normal.py \
+    --source CHAN1 \
+    --events 50000 \
+    --high-voltage-kv 1.15 \
+    --label hybrid_pmt_1p15kv_source
+    
 """
 
 from __future__ import annotations
