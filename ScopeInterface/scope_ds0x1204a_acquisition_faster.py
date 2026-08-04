@@ -3,7 +3,7 @@
 
 This is a minimally changed variant of scope_ds0x1204a_acquisition.py. It
 reuses that module's acquisition, CSV, metadata, and command-line behavior,
-but avoids ROOT compression and excessive per-branch basket preallocation.
+but uses fast ROOT compression and avoids an intermediate Python sample list.
 """
 
 from __future__ import annotations
@@ -19,10 +19,8 @@ import scope_ds0x1204a_acquisition as acquisition
 
 
 # Compression changes only the physical representation, not the tree schema,
-# branch types, or values. None gives the lowest post-acquisition write time.
-ROOT_COMPRESSION = None
-ROOT_INITIAL_BASKET_CAPACITY = 1
-ROOT_RESIZE_FACTOR = 2.0
+# branch types, or values. LZ4 is faster than the default ZLIB compression.
+ROOT_COMPRESSION = uproot.LZ4(1)
 
 
 def read_raw_waveform(scope: Any) -> np.ndarray:
@@ -120,13 +118,7 @@ def acquire_displayed_waveforms(
     print(f"Writing ROOT file with {len(root_branches)} waveform branches...")
     root_write_started = time.perf_counter()
     with uproot.recreate(root_file, compression=ROOT_COMPRESSION) as root:
-        tree = root.mktree(
-            "waveforms",
-            {name: np.float64 for name in root_branches},
-            initial_basket_capacity=ROOT_INITIAL_BASKET_CAPACITY,
-            resize_factor=ROOT_RESIZE_FACTOR,
-        )
-        tree.extend(root_branches)
+        root.mktree("waveforms", root_branches)
     print(
         "ROOT file written in "
         f"{acquisition.format_duration(time.perf_counter() - root_write_started)}."
